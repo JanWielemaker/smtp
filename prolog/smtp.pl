@@ -74,6 +74,10 @@ Data is currently being sent using the =DATA= keyword.
 	   'Security system to use').
 :- setting(from, atom, '',
 	   'Default from-address').
+:- setting(user, atom, '',
+	   'Default user to authenticate').
+:- setting(password, atom, '',
+	   'Default password for smtp:user').
 :- setting(hostname, atom, '',
 	   'Default hostname').
 
@@ -240,13 +244,19 @@ starttls(In, Out, In, Out, Lines, Lines, _).
 %%	auth(+In, +Out, +From, +Lines, +Options)
 %
 %	Negotiate authentication with the server. Currently supports the
-%	=plain= and =login= authentication methods.
+%	=plain= and =login=  authentication   methods.  Authorization is
+%	sent if the option =auth= is given   or  the settings =user= and
+%	=password= are not the empty atom ('').
 %
 %	@param	Lines is the result of read_ok/3 on the EHLO command,
 %		which tells us which authorizations are supported.
 
 auth(In, Out, From, Lines, Options) :-
-	option(auth(Auth), Options), !,
+	(   option(auth(Auth), Options)
+	;   setting(user, User), User \== '',
+	    setting(password, Password), Password \== '',
+	    Auth = User-Password
+	), !,
 	auth_supported(Lines, Supported),
 	auth_p(In, Out, From, Auth, Supported, Options).
 auth(_, _, _, _, _).

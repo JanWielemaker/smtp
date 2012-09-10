@@ -37,6 +37,9 @@
 :- use_module(library(debug)).
 :- use_module(library(dcg/basics)).
 
+:- meta_predicate
+	smtp_send_mail(+, 1, +).
+
 /** <module> Send E-mail through SMTP
 
 This module provides a  simple  means  to   send  E-mail  from  a Prolog
@@ -97,9 +100,6 @@ Data is currently being sent using the =DATA= keyword.
 %	@param To is an atom holding the target address
 %	@param Goal is called as call(Goal, Stream) and must provide the
 %	       body of the message.
-
-:- meta_predicate
-	open_mail(+, 1, +).
 
 smtp_send_mail(To, Goal, Options) :-
 	setting(security, DefSecurity),

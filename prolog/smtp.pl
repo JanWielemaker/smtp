@@ -81,6 +81,8 @@ Data is currently being sent using the =DATA= keyword.
 	   'Default user to authenticate').
 :- setting(password, atom, '',
 	   'Default password for smtp:user').
+:- setting(auth_method, oneof([plain,login,default]), default,
+	   'Default authorization to use').
 :- setting(hostname, atom, '',
 	   'Default hostname').
 
@@ -93,6 +95,7 @@ Data is currently being sent using the =DATA= keyword.
 %		* from(+FromAddress)
 %		* subject(+Subject)
 %		* auth(User-Password)
+%		* auth_method(PlainOrLogin)
 %		* content_type(+ContentType)
 %
 %	Defaults are provided by settings associated to this module.
@@ -110,10 +113,16 @@ smtp_send_mail(To, Goal, Options) :-
 	option(smtp(Host), Options, DefHost),
 	option(port(Port), Options, DefPort),
 	hostname(HostName, Options),
+	(   setting(auth_method, AuthMethod),
+	    AuthMethod \== default
+	->  Extra = [auth_method(AuthMethod)]
+	;   Extra = []
+	),
 	merge_options([ security(Security),
 			port(Port),
 			host(Host),
 			hostname(HostName)
+		      | Extra
 		      ], Options, Options1),
 	setup_call_cleanup(
 	    smtp_open(Host:Port, In, Out, Options1),
@@ -206,9 +215,9 @@ do_send_mail_cont(In, Out, To, Goal, Lines, Options) :-
 	;   existence_error(smtp_option, from)
 	),
 	auth(In, Out, From, Lines, Options),
-	sock_send(Out, 'MAIL FROM: ~w\r\n', [From]),
+	sock_send(Out, 'MAIL FROM:<~w>\r\n', [From]),
 	read_ok(In, 250),
-	sock_send(Out, 'RCPT TO: ~w\r\n', [To]),
+	sock_send(Out, 'RCPT TO:<~w>\r\n', [To]),
 	read_ok(In, 250),
 	sock_send(Out, 'DATA\r\n', []),
 	read_ok(In, 354),
@@ -261,8 +270,9 @@ auth(In, Out, From, Lines, Options) :-
 	auth_p(In, Out, From, Auth, Supported, Options).
 auth(_, _, _, _, _).
 
-auth_p(In, Out, From, User-Password, Protocols, _Options) :-
-	memberchk(plain, Protocols), !,
+auth_p(In, Out, From, User-Password, Protocols, Options) :-
+	memberchk(plain, Protocols),
+	\+ option(auth_method(login), Options), !,
 	atom_codes(From, FromCodes),
 	atom_codes(User, UserCodes),
 	atom_codes(Password, PwdCodes),

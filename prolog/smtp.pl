@@ -1,7 +1,7 @@
 /*  Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@cs.vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (C): 2010-2012, University of Amsterdam,
+    Copyright (C): 2010-2015, University of Amsterdam,
 			      VU University Amsterdam
 
     This program is free software; you can redistribute it and/or
@@ -91,14 +91,35 @@ Data is currently being sent using the =DATA= keyword.
 %	Send mail using SMTP.  To is the e-mail address of the receiver.
 %	Options:
 %
-%		* smtp(+Host)
-%		* from(+FromAddress)
-%		* subject(+Subject)
-%		* auth(User-Password)
-%		* auth_method(PlainOrLogin)
-%		* content_type(+ContentType)
+%	  * smtp(+Host)
+%           the ip address for smtp host, eg. swi-prolog.org
+%	  * from(+FromAddress)
+%           atomic identifies sender address (does not set From: header)
+%	  * subject(+Subject)
+%           atomic: text for 'Subject:' email header
+%	  * auth(User-Password)
+%           authedication credentials, as atoms
+%	  * auth_method(+PlainOrLoginOrNone)
+%           type of authentication. Default is =default=, alternatives
+%	    are =plain= and =login=
+%         * security(Security)
+%           one of: none, ssl, tls, starttls
+%	  * content_type(+ContentType)
+%           sets Content-Type header
+%         * mailed_by(By)
+%	    add X-Mailer: SWI-Prolog <version>, pack(smtp) to header
+%	    iff By == true
+%         * header(Name(Val))
+%	    add HName: Val to headers. HName is Name if Name's first
+%	    letter is a capital, and it is Name after capitalising its
+%	    first letter otherwise. For instance header(from('My name,
+%	    me@server.org')) adds header "From: My name, my@server.org"
+%	    and header('FOO'(bar)) adds "FOO: bar"
 %
 %	Defaults are provided by settings associated to this module.
+%
+%	Listens to debug(smtp) which  for   instance  reports failure to
+%	connect, (computation fails as per non-debug execution).
 %
 %	@param To is an atom holding the target address
 %	@param Goal is called as call(Goal, Stream) and must provide the

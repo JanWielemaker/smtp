@@ -145,6 +145,7 @@ smtp_send_mail(To, Goal, Options) :-
 			hostname(HostName)
 		      | Extra
 		      ], Options, Options1),
+	debug( smtp, 'Starting smtp with options: ~w', [Options] ),
 	setup_call_cleanup(
 	    smtp_open(Host:Port, In, Out, Options1),
 	    do_send_mail(In, Out, To, Goal, Options1),
@@ -184,7 +185,11 @@ smtp_open(Address, In, Out, Options) :-
 	    ssl_negotiate(SSL, In0, Out0, In, Out)
 	;   In = In0,
 	    Out = Out0
-	).
+	),
+	!.
+smtp_open(Address, _In, _Out, Options) :-
+	debug( smtp, 'Failed to open connection at address: ~w, with options: ~w', [Address,Options] ),
+	fail.
 
 :- public
 	cert_verify/5.
@@ -247,7 +252,11 @@ do_send_mail_cont(In, Out, To, Goal, Lines, Options) :-
 	sock_send(Out, '\r\n', []),
 	call(Goal, Out),
 	sock_send(Out, '\r\n.\r\n', []),
-	read_ok(In, 250).
+	read_ok(In, 250), !.
+do_send_mail_cont(_In, _Out, To, _Goal, _Lines, Options ) :-
+	debug(smtp, 'Failed to sent email To: ~w, with options: ~w',
+	      [To,Options]),
+	fail.
 
 %%	starttls(+In0, +Out0, -In, -Out, +LinesIn, -LinesOut, +Options)
 %
@@ -288,6 +297,7 @@ auth(In, Out, From, Lines, Options) :-
 	    Auth = User-Password
 	), !,
 	auth_supported(Lines, Supported),
+	debug( smtp, 'Authentications supported: ~w, with options: ~w', [Supported,Options] ),
 	auth_p(In, Out, From, Auth, Supported, Options).
 auth(_, _, _, _, _).
 

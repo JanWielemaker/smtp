@@ -369,7 +369,24 @@ header_option(H, Out) :-
 	H =.. [Name, Value],
 	header(Name, Label), !,
 	format(Out, '~w: ~w\r\n', [Label, Value]).
+header_option(mailed_by(true), Out) :-
+	current_prolog_flag( version_data, swi(Maj,Min,Pat,_) ),
+	atomic_list_concat( [Maj,Min,Pat], '.', Vers ),	!,
+	format(Out, 'X-Mailer: SWI-Prolog ~a, pack(smtp)\r\n', [Vers]).
+header_option(header(Hdr), Out) :-
+	Hdr =.. [HdrName, Value],
+	header_key_upcase(HdrName, HdrAtom), !,
+	format(Out, '~w: ~w\r\n', [HdrAtom, Value]).
 header_option(_, _).
+
+header_key_upcase(Name, Atom) :-
+	sub_atom( Name, 0, 1, _, FirstOfName),
+	upcase_atom(FirstOfName, FirstOfAtom),
+	FirstOfAtom \== FirstOfName, !,
+	sub_atom(Name, 1, _, 0, Unchanged),
+	atom_concat(FirstOfAtom, Unchanged, Atom).
+header_key_upcase(Name, Name).
+
 
 %%	read_ok(+Stream, ?Code) is semidet.
 %%	read_ok(+Stream, ?Code, -Lines) is semidet.

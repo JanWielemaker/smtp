@@ -410,7 +410,8 @@ header_options(Out, Options) :-
 
 add_default_header(Options0, Options) :-
     add_date_header(Options0, Options1),
-    add_from_header(Options1, Options).
+    add_from_header(Options1, Options2),
+    add_content_type_header(Options2, Options).
 
 add_from_header(Options0, Options) :-
     (   option(header(from(_)), Options0)
@@ -425,6 +426,13 @@ add_date_header(Options0, Options) :-
     ->  Options = Options0
     ;   Options = [date(now)|Options0]
     ).
+
+add_content_type_header(Options0, Options) :-
+    (   option(content_type(_), Options0)
+    ->  Options = Options0
+    ;   Options = [content_type(text/plain)|Options0]
+    ).
+
 
 emit_header([], _).
 emit_header([H|T], Out) :-

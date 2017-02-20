@@ -41,6 +41,7 @@
 :- use_module(library(option)).
 :- use_module(library(lists)).
 :- use_module(library(debug)).
+:- use_module(library(error)).
 :- use_module(library(dcg/basics)).
 
 :- meta_predicate
@@ -92,26 +93,32 @@ Data is currently being sent using the =DATA= keyword.
 :- setting(hostname, atom, '',
 	   'Default hostname').
 
+:- meta_predicate
+	setup_call_error_cleanup(0,0,0).
+
 %%	smtp_send_mail(+To, :Goal, +Options)
 %
 %	Send mail using SMTP.  To is the e-mail address of the receiver.
 %	Options:
 %
 %	  * smtp(+Host)
-%           the ip address for smtp host, eg. swi-prolog.org
+%           the name or ip address for smtp host, eg. swi-prolog.org
 %	  * from(+FromAddress)
-%           atomic identifies sender address (does not set From: header)
+%           atomic identifies sender address.  Provides the default
+%           for header(from(From)).
+%	  * date(+Date)
+%	    Set the date header.  Default is to use the current time.
 %	  * subject(+Subject)
 %           atomic: text for 'Subject:' email header
 %	  * auth(User-Password)
-%           authedication credentials, as atoms
+%           authentication credentials, as atoms or strings.
 %	  * auth_method(+PlainOrLoginOrNone)
 %           type of authentication. Default is =default=, alternatives
 %	    are =plain= and =login=
 %         * security(Security)
-%           one of: none, ssl, tls, starttls
+%           one of: `none`, `ssl`, `tls`, `starttls`
 %	  * content_type(+ContentType)
-%           sets Content-Type header
+%           sets =|Content-Type|= header
 %         * mailed_by(By)
 %	    add X-Mailer: SWI-Prolog <version>, pack(smtp) to header
 %	    iff By == true
@@ -127,9 +134,9 @@ Data is currently being sent using the =DATA= keyword.
 %	Listens to debug(smtp) which  for   instance  reports failure to
 %	connect, (computation fails as per non-debug execution).
 %
-%	@param To is an atom holding the target address
-%	@param Goal is called as call(Goal, Stream) and must provide the
-%	       body of the message.
+%	@arg To is an atom holding the target address
+%	@arg Goal is called as call(Goal, Stream) and must provide
+%	     the body of the message.
 
 smtp_send_mail(To, Goal, Options) :-
 	setting(security, DefSecurity),
@@ -140,22 +147,33 @@ smtp_send_mail(To, Goal, Options) :-
 	option(smtp(Host), Options, DefHost),
 	option(port(Port), Options, DefPort),
 	hostname(HostName, Options),
-	(   setting(auth_method, AuthMethod),
-	    AuthMethod \== default
-	->  Extra = [auth_method(AuthMethod)]
-	;   Extra = []
-	),
-	merge_options([ security(Security),
+	DefOptions0 = [ security(Security),
 			port(Port),
 			host(Host),
 			hostname(HostName)
-		      | Extra
-		      ], Options, Options1),
+		      ],
+	add_auth_method(DefOptions0, DefOptions1),
+	add_from(DefOptions1, DefOptions),
+	merge_options(DefOptions, Options, Options1),
 	debug( smtp, 'Starting smtp with options: ~w', [Options] ),
 	setup_call_cleanup(
 	    smtp_open(Host:Port, In, Out, Options1),
 	    do_send_mail(In, Out, To, Goal, Options1),
 	    smtp_close(In, Out)).
+
+add_auth_method(Options0, Options) :-
+	(   setting(auth_method, AuthMethod),
+	    AuthMethod \== default
+	->  Options = [auth_method(AuthMethod)|Options0]
+	;   Options = Options0
+	).
+
+add_from(Options0, Options) :-
+	(   setting(from, From),
+	    From \== ''
+	->  Options = [from(From)|Options0]
+	;   Options = Options0
+	).
 
 %%	hostname(-HostName, +Options) is det.
 %
@@ -208,9 +226,6 @@ ssl_security(tls).
 smtp_close(In, Out) :-
 	call_cleanup(close(Out), close(In)).
 
-:- meta_predicate
-	setup_call_error_cleanup(0,0,0).
-
 setup_call_error_cleanup(Setup, Goal, Cleanup) :-
 	setup_call_catcher_cleanup(
 	    Setup, Goal, Catcher, error_cleanup(Catcher, Cleanup)).
@@ -248,9 +263,6 @@ close_tls(_, _, In, Out) :-
 
 do_send_mail_cont(In, Out, To, Goal, Lines, Options) :-
 	(   option(from(From), Options)
-	->  true
-	;   setting(from, From),
-	    From \== ''
 	->  true
 	;   existence_error(smtp_option, from)
 	),
@@ -480,8 +492,6 @@ reply_line(Code, Line, Cont) -->
 	;   " "
 	->  {Cont = false}
 	),
-	rest(LineCodes),
+	remainder(LineCodes),
 	{ atom_codes(Line, LineCodes) }.
-
-rest(LineCodes, LineCodes, []).
 

@@ -30,6 +30,7 @@
 	  [ smtp_send_mail/3		% +To, :Goal, +Options
 	  ]).
 :- use_module(library(socket)).
+:- use_module(library(ssl)).
 :- use_module(library(readutil)).
 :- use_module(library(settings)).
 :- use_module(library(option)).
@@ -170,40 +171,49 @@ default_port(tls,       _, 465).
 default_port(starttls,  _, 587).
 
 smtp_open(Address, In, Out, Options) :-
-	tcp_socket(Socket),
-	tcp_connect(Socket, Address),
-	tcp_open_socket(Socket, In0, Out0),
-	(   option(security(Security), Options),
-	    ssl_security(Security)
-	->  Address = Host:Port,
-	    ssl_context(client, SSL,
-			[ host(Host),
-			  port(Port),
-			  cert_verify_hook(cert_verify),
-			  close_parent(true)
-			]),
-	    ssl_negotiate(SSL, In0, Out0, In, Out)
-	;   In = In0,
-	    Out = Out0
-	),
+	setup_call_error_cleanup(
+	    tcp_socket(Socket),
+	    tcp_connect(Socket, Address),
+	    tcp_close_socket(Socket)),
+	setup_call_error_cleanup(
+	    tcp_open_socket(Socket, In0, Out0),
+	    setup_ssl(Address, In0, Out0, In, Out, Options),
+	    smtp_close(In0, Out0)),
 	!.
 smtp_open(Address, _In, _Out, Options) :-
-	debug( smtp, 'Failed to open connection at address: ~w, with options: ~w', [Address,Options] ),
+	debug(smtp, 'Failed to open connection at address: ~w, \c
+		     with options: ~w', [Address,Options] ),
 	fail.
 
-:- public
-	cert_verify/5.
-
-cert_verify(_SSL, _ProblemCert, _AllCerts, _FirstCert, _Error) :-
-        format(user_error, 'Accepting certificate~n', []).
+setup_ssl(Address, In0, Out0, In, Out, Options) :-
+	option(security(Security), Options),
+	ssl_security(Security), !,
+	Address = Host:_Port,
+	ssl_context(client, SSL,
+		    [ host(Host),
+		      cert_verify_hook(cert_accept_any),
+		      close_parent(true)
+		    ]),
+	ssl_negotiate(SSL, In0, Out0, In, Out).
+setup_ssl(_, In, Out, In, Out, _Options).
 
 ssl_security(ssl).
 ssl_security(tls).
 
 smtp_close(In, Out) :-
-	close(Out),
-	close(In).
+	call_cleanup(close(Out), close(In)).
 
+:- meta_predicate
+	setup_call_error_cleanup(0,0,0).
+
+setup_call_error_cleanup(Setup, Goal, Cleanup) :-
+	setup_call_catcher_cleanup(
+	    Setup, Goal, Catcher, error_cleanup(Catcher, Cleanup)).
+
+error_cleanup(exit, _) :- !.
+error_cleanup(!, _) :- !.
+error_cleanup(_, Cleanup) :-
+	call(Cleanup).
 
 %%	do_send_mail(+In, +Out, +To, :Goal, +Options) is det.
 %
@@ -229,8 +239,7 @@ do_send_mail(In, Out, To, Goal, Options) :-
 
 close_tls(In, Out, In, Out) :- !.
 close_tls(_, _, In, Out) :-
-	close(Out),
-	close(In).
+	smtp_close(In, Out).
 
 do_send_mail_cont(In, Out, To, Goal, Lines, Options) :-
 	(   option(from(From), Options)
@@ -271,7 +280,7 @@ starttls(In0, Out0, In, Out, _Lines, Lines, Options) :-
 	ssl_context(client, SSL,
 		    [ host(Host),
 		      port(Port),
-		      cert_verify_hook(cert_verify)
+		      cert_verify_hook(cert_accept_any)
 		    ]),
 	ssl_negotiate(SSL, In0, Out0, In, Out),
 	option(hostname(Me), Options),

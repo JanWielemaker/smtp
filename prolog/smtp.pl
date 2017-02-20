@@ -257,7 +257,7 @@ do_send_mail_cont(In, Out, To, Goal, Lines, Options) :-
 	sock_send(Out, 'DATA\r\n', []),
 	read_ok(In, 354),
 	format(Out, 'To: ~w\r\n', [To]),
-	header_options(Options, Out),
+	header_options(Out, Options),
 	sock_send(Out, '\r\n', []),
 	call(Goal, Out),
 	sock_send(Out, '\r\n.\r\n', []),
@@ -366,13 +366,41 @@ sock_send(Stream, Fmt, Args) :-
 	format(Stream, Fmt, Args),
 	flush_output(Stream).
 
-header_options([], _).
-header_options([H|T], Out) :-
-	header_option(H, Out),
-	header_options(T, Out).
+%!	header_options(+Out, +Options) is det.
+%
+%	Send  SMTP  headers  from  provided  Options.  First  adds  some
+%	defaults, notably:
+%
+%	  - If there is no header(from(From)) it uses the from(From)
+%	    from Options.
+%	  - If there is no date(Spec) it adds date(Date).
 
-header(subject, 'Subject').
-header(content_type, 'Content-Type').
+header_options(Out, Options) :-
+	add_default_header(Options, Options1),
+	emit_header(Options1, Out).
+
+add_default_header(Options0, Options) :-
+	add_date_header(Options0, Options1),
+	add_from_header(Options1, Options).
+
+add_from_header(Options0, Options) :-
+	(   option(header(from(_)), Options0)
+	->  Options = Options0
+	;   option(from(From), Options0)
+	->  Options = [header(from(From))|Options0]
+	;   Options = Options0
+	).
+
+add_date_header(Options0, Options) :-
+	(   option(date(_), Options0)
+	->  Options = Options0
+	;   Options = [date(now)|Options0]
+	).
+
+emit_header([], _).
+emit_header([H|T], Out) :-
+	header_option(H, Out),
+	emit_header(T, Out).
 
 header_option(H, Out) :-
 	H =.. [Name, Value],
@@ -382,11 +410,21 @@ header_option(mailed_by(true), Out) :-
 	current_prolog_flag( version_data, swi(Maj,Min,Pat,_) ),
 	atomic_list_concat( [Maj,Min,Pat], '.', Vers ),	!,
 	format(Out, 'X-Mailer: SWI-Prolog ~a, pack(smtp)\r\n', [Vers]).
+header_option(date(Date), Out) :-
+	(   Date == now
+	->  get_time(Time)
+	;   Time = Date
+	),
+	format_time(string(String), '%a, %d %b %Y %T %z', Time),
+	format(Out, 'Date: ~w\r\n', [String]).
 header_option(header(Hdr), Out) :-
 	Hdr =.. [HdrName, Value],
 	header_key_upcase(HdrName, HdrAtom), !,
 	format(Out, '~w: ~w\r\n', [HdrAtom, Value]).
 header_option(_, _).
+
+header(subject, 'Subject').
+header(content_type, 'Content-Type').
 
 header_key_upcase(Name, Atom) :-
 	sub_atom( Name, 0, 1, _, FirstOfName),
